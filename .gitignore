@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+test_*.py
+ws_auth_ext/
+ws_auth_ext_v2/
+.railway/

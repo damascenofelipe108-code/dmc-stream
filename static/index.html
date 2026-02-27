@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DMC Stream</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 20px 20px 8px;
+  }
+  .header img { height: 40px; width: auto; }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #888;
+    letter-spacing: 2px;
+  }
+
+  #status {
+    text-align: center;
+    padding: 6px;
+    font-size: 13px;
+    color: #555;
+  }
+  #status.connected { color: #17bf63; }
+  #status.disconnected { color: #e0245e; }
+
+  #feed {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 8px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .card.new { animation: slideIn 0.3s ease-out; }
+  .card.profile-change { border-left: 3px solid #f59e0b; }
+  .card.new-follow { border-left: 3px solid #8b5cf6; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .card-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    display: inline-block;
+  }
+  .card-label.tweet-label { background: #1da1f222; color: #1da1f2; }
+  .card-label.reply-label { background: #17bf6322; color: #17bf63; }
+  .card-label.quote-label { background: #e048a822; color: #e048a8; }
+  .card-label.rt-label { background: #17bf6322; color: #17bf63; }
+  .card-label.profile-label { background: #f59e0b22; color: #f59e0b; }
+  .card-label.follow-label { background: #8b5cf622; color: #8b5cf6; }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #333;
+    flex-shrink: 0;
+  }
+
+  .author-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .author-name {
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .author-handle {
+    font-size: 13px;
+    color: #666;
+  }
+
+  .card-meta {
+    margin-left: auto;
+    text-align: right;
+    flex-shrink: 0;
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: #555;
+  }
+  .card-meta span { white-space: nowrap; }
+
+  .tweet-text {
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Media grid */
+  .media-grid {
+    margin-top: 10px;
+    display: grid;
+    gap: 4px;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .media-grid.m1 { grid-template-columns: 1fr; }
+  .media-grid.m2 { grid-template-columns: 1fr 1fr; }
+  .media-grid.m3 { grid-template-columns: 1fr 1fr; }
+  .media-grid.m4 { grid-template-columns: 1fr 1fr; }
+  .media-grid img, .media-grid video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    max-height: 320px;
+    cursor: pointer;
+  }
+  .media-grid img:hover { opacity: 0.85; }
+
+  /* Quoted / replied tweet embed */
+  .embed-tweet {
+    margin-top: 10px;
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .embed-tweet .embed-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .embed-tweet .embed-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #333;
+  }
+  .embed-tweet .embed-name {
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .embed-tweet .embed-handle {
+    font-size: 12px;
+    color: #666;
+  }
+  .embed-tweet .embed-text {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #ccc;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .embed-tweet .embed-media img {
+    margin-top: 8px;
+    border-radius: 8px;
+    max-width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+  }
+
+  /* Profile change */
+  .change-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .change-item {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .change-field {
+    font-weight: 600;
+    color: #f59e0b;
+    text-transform: capitalize;
+  }
+  .change-old {
+    color: #ef4444;
+    text-decoration: line-through;
+  }
+  .change-new {
+    color: #22c55e;
+  }
+  .change-arrow { color: #555; margin: 0 6px; }
+  .change-img {
+    max-width: 200px;
+    max-height: 120px;
+    border-radius: 8px;
+    margin-top: 4px;
+    display: block;
+    object-fit: cover;
+  }
+
+  /* Follow card */
+  .follow-target {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .follow-target .avatar { width: 36px; height: 36px; }
+  .follow-target-info { min-width: 0; }
+  .follow-target-name { font-weight: 600; font-size: 13px; }
+  .follow-target-handle { font-size: 12px; color: #666; }
+  .follow-target-bio { font-size: 12px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .follow-target-followers { font-size: 11px; color: #555; margin-top: 2px; }
+
+  .tweet-stats {
+    margin-top: 8px;
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: #555;
+  }
+
+  .tweet-link {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #1da1f2;
+    text-decoration: none;
+  }
+  .tweet-link:hover { text-decoration: underline; }
+
+  .reply-context {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 6px;
+  }
+  .reply-context a { color: #1da1f2; text-decoration: none; }
+  .reply-context a:hover { text-decoration: underline; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #444;
+    font-size: 15px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img src="/static/logo.png" alt="DMC">
+  <h1>DMC STREAM</h1>
+</div>
+<div id="status" class="disconnected">Connecting...</div>
+
+<div id="feed">
+  <div class="empty-state" id="empty">Waiting for events...</div>
+</div>
+
+<script>
+(function() {
+  const feed = document.getElementById("feed");
+  const statusEl = document.getElementById("status");
+  const emptyEl = document.getElementById("empty");
+  const MAX_CARDS = 200;
+  const STORAGE_KEY = "dmc_stream_events";
+  let ws;
+  let reconnectDelay = 1000;
+
+  function loadStore() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+
+  function saveStore(items) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_CARDS)));
+    } catch (e) {}
+  }
+
+  // Clear old storage format
+  localStorage.removeItem("dmc_stream_tweets");
+  if (localStorage.getItem(STORAGE_KEY + "_v") !== "3") {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(STORAGE_KEY + "_v", "3");
+  }
+
+  let store = loadStore();
+  if (store.length > 0) {
+    if (emptyEl) emptyEl.remove();
+    for (const item of store) {
+      renderCard(item, false);
+    }
+  }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(proto + "//" + location.host + "/ws");
+    ws.onopen = function() {
+      statusEl.textContent = "Connected";
+      statusEl.className = "connected";
+      reconnectDelay = 1000;
+    };
+    ws.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      addItem(data);
+    };
+    ws.onclose = function() {
+      statusEl.textContent = "Disconnected — reconnecting...";
+      statusEl.className = "disconnected";
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
+    };
+    ws.onerror = function() { ws.close(); };
+  }
+
+  function esc(text) {
+    const div = document.createElement("div");
+    div.textContent = text || "";
+    return div.innerHTML;
+  }
+
+  function fmtNum(n) {
+    if (!n && n !== 0) return "";
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+    if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+    return String(n);
+  }
+
+  function addItem(item) {
+    store.unshift(item);
+    if (store.length > MAX_CARDS) store.length = MAX_CARDS;
+    saveStore(store);
+    if (emptyEl && emptyEl.parentNode) emptyEl.remove();
+    renderCard(item, true);
+    while (feed.children.length > MAX_CARDS) {
+      feed.removeChild(feed.lastChild);
+    }
+  }
+
+  function getMediaHtml(extEntities) {
+    if (!extEntities || !extEntities.media || !extEntities.media.length) return "";
+    const media = extEntities.media;
+    const count = Math.min(media.length, 4);
+    let html = '<div class="media-grid m' + count + '">';
+    for (let i = 0; i < count; i++) {
+      const m = media[i];
+      if (m.type === "video" || m.type === "animated_gif") {
+        const videoUrl = (m.video_info && m.video_info.variants)
+          ? m.video_info.variants.filter(v => v.content_type === "video/mp4").sort((a,b) => (b.bitrate||0) - (a.bitrate||0))[0]
+          : null;
+        if (videoUrl) {
+          html += '<video src="' + esc(videoUrl.url) + '" controls ' + (m.type === "animated_gif" ? 'autoplay loop muted' : '') + '></video>';
+        } else {
+          html += '<img src="' + esc(m.media_url_https) + '" alt="" onclick="window.open(this.src)">';
+        }
+      } else {
+        html += '<img src="' + esc(m.media_url_https) + '" alt="" onclick="window.open(this.src)">';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderEmbedTweet(tweet, label) {
+    if (!tweet) return "";
+    const a = tweet.author || {};
+    const uname = a.userName || a.username || "?";
+    const name = a.name || uname;
+    const pic = a.profilePicture || "";
+    let html = '<div class="embed-tweet">';
+    if (label) html += '<div style="font-size:11px;color:#666;margin-bottom:4px;">' + esc(label) + '</div>';
+    html += '<div class="embed-header">';
+    if (pic) html += '<img class="embed-avatar" src="' + esc(pic) + '" alt="">';
+    html += '<span class="embed-name">' + esc(name) + '</span>';
+    html += '<span class="embed-handle">@' + esc(uname) + '</span>';
+    html += '</div>';
+    if (tweet.text) html += '<div class="embed-text">' + esc(tweet.text) + '</div>';
+    // Media in embedded tweet
+    if (tweet.extendedEntities && tweet.extendedEntities.media && tweet.extendedEntities.media.length) {
+      const m = tweet.extendedEntities.media[0];
+      html += '<div class="embed-media"><img src="' + esc(m.media_url_https) + '" alt="" onclick="window.open(this.src)"></div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderCard(item, animate) {
+    const etype = item._event_type || "tweet";
+
+    if (etype === "tweet") {
+      renderTweetCard(item, animate);
+    } else if (etype === "profile_change") {
+      renderProfileCard(item, animate);
+    } else if (etype === "new_follow") {
+      renderFollowCard(item, animate);
+    }
+  }
+
+  function renderTweetCard(tweet, animate) {
+    const card = document.createElement("div");
+    card.className = animate ? "card new" : "card";
+
+    const author = tweet.author || {};
+    const username = author.userName || author.username || "unknown";
+    const displayName = author.name || username;
+    const avatar = author.profilePicture || "";
+
+    // Determine tweet type label
+    let labelClass = "tweet-label";
+    let labelText = "Tweet";
+    if (tweet.retweeted_tweet) {
+      labelClass = "rt-label";
+      labelText = "Retweet";
+    } else if (tweet.quoted_tweet) {
+      labelClass = "quote-label";
+      labelText = "Quote";
+    } else if (tweet.isReply) {
+      labelClass = "reply-label";
+      labelText = "Reply";
+    }
+
+    let html = '<span class="card-label ' + labelClass + '">' + labelText + '</span>';
+
+    // Header
+    html += '<div class="card-header">';
+    if (avatar) {
+      html += '<img class="avatar" src="' + esc(avatar) + '" alt="">';
+    } else {
+      html += '<div class="avatar"></div>';
+    }
+    html += '<div class="author-info">';
+    html += '<div class="author-name">' + esc(displayName) + '</div>';
+    html += '<div class="author-handle">@' + esc(username) + '</div>';
+    html += '</div>';
+    html += '<div class="card-meta">';
+    if (tweet.likeCount) html += '<span>' + fmtNum(tweet.likeCount) + ' likes</span>';
+    if (tweet.retweetCount) html += '<span>' + fmtNum(tweet.retweetCount) + ' RT</span>';
+    html += '</div></div>';
+
+    // Reply context
+    if (tweet.isReply && tweet.inReplyToUsername) {
+      html += '<div class="reply-context">Replying to <a href="https://twitter.com/' + esc(tweet.inReplyToUsername) + '" target="_blank">@' + esc(tweet.inReplyToUsername) + '</a></div>';
+    }
+
+    // Replied tweet embed
+    if (tweet._replied_tweet) {
+      html += renderEmbedTweet(tweet._replied_tweet, "Original tweet:");
+    }
+
+    // Text (clean up t.co links that are media)
+    if (tweet.text) {
+      let cleanText = tweet.text;
+      // Remove t.co links that are just media URLs
+      if (tweet.extendedEntities && tweet.extendedEntities.media) {
+        for (const m of tweet.extendedEntities.media) {
+          if (m.url) cleanText = cleanText.replace(m.url, "").trim();
+        }
+      }
+      if (cleanText) {
+        html += '<div class="tweet-text">' + esc(cleanText) + '</div>';
+      }
+    }
+
+    // Media
+    html += getMediaHtml(tweet.extendedEntities);
+
+    // Quoted tweet
+    if (tweet.quoted_tweet) {
+      html += renderEmbedTweet(tweet.quoted_tweet, null);
+    }
+
+    // Retweeted tweet content
+    if (tweet.retweeted_tweet) {
+      html += renderEmbedTweet(tweet.retweeted_tweet, null);
+    }
+
+    // Stats
+    if (tweet.replyCount || tweet.viewCount) {
+      html += '<div class="tweet-stats">';
+      if (tweet.replyCount) html += '<span>' + fmtNum(tweet.replyCount) + ' replies</span>';
+      if (tweet.viewCount) html += '<span>' + fmtNum(tweet.viewCount) + ' views</span>';
+      html += '</div>';
+    }
+
+    // Link
+    if (tweet.url || (tweet.id && username)) {
+      const tweetUrl = tweet.url || ("https://twitter.com/" + encodeURIComponent(username) + "/status/" + tweet.id);
+      html += '<a class="tweet-link" href="' + tweetUrl + '" target="_blank" rel="noopener">View on Twitter</a>';
+    }
+
+    card.innerHTML = html;
+    if (animate) {
+      feed.insertBefore(card, feed.firstChild);
+    } else {
+      feed.appendChild(card);
+    }
+  }
+
+  function renderProfileCard(event, animate) {
+    const card = document.createElement("div");
+    card.className = animate ? "card profile-change new" : "card profile-change";
+
+    const author = event.author || {};
+    const username = author.userName || event.username || "?";
+    const displayName = author.name || username;
+    const avatar = author.profilePicture || "";
+
+    let html = '<span class="card-label profile-label">Profile Update</span>';
+    html += '<div class="card-header">';
+    if (avatar) html += '<img class="avatar" src="' + esc(avatar) + '" alt="">';
+    else html += '<div class="avatar"></div>';
+    html += '<div class="author-info">';
+    html += '<div class="author-name">' + esc(displayName) + '</div>';
+    html += '<div class="author-handle">@' + esc(username) + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="change-list">';
+    const changes = event.changes || [];
+    for (const c of changes) {
+      const field = c.field;
+      html += '<div class="change-item">';
+      html += '<span class="change-field">' + esc(field) + ':</span> ';
+
+      if (field === "profilePicture" || field === "coverPicture") {
+        html += '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;">';
+        if (c.old) html += '<img class="change-img" src="' + esc(c.old) + '" style="opacity:0.5">';
+        html += '<span class="change-arrow" style="font-size:20px;">→</span>';
+        if (c.new) html += '<img class="change-img" src="' + esc(c.new) + '">';
+        html += '</div>';
+      } else if (field === "followers" || field === "following") {
+        html += '<span class="change-old">' + fmtNum(c.old) + '</span>';
+        html += '<span class="change-arrow">→</span>';
+        html += '<span class="change-new">' + fmtNum(c.new) + '</span>';
+      } else {
+        html += '<span class="change-old">' + esc(String(c.old || "(empty)")) + '</span>';
+        html += '<span class="change-arrow">→</span>';
+        html += '<span class="change-new">' + esc(String(c.new || "(empty)")) + '</span>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
+    card.innerHTML = html;
+    if (animate) {
+      feed.insertBefore(card, feed.firstChild);
+    } else {
+      feed.appendChild(card);
+    }
+  }
+
+  function renderFollowCard(event, animate) {
+    const card = document.createElement("div");
+    card.className = animate ? "card new-follow new" : "card new-follow";
+
+    const author = event.author || {};
+    const username = author.userName || event.username || "?";
+    const displayName = author.name || username;
+    const avatar = author.profilePicture || "";
+    const followed = event.followed || {};
+
+    let html = '<span class="card-label follow-label">New Follow</span>';
+    html += '<div class="card-header">';
+    if (avatar) html += '<img class="avatar" src="' + esc(avatar) + '" alt="">';
+    else html += '<div class="avatar"></div>';
+    html += '<div class="author-info">';
+    html += '<div class="author-name">' + esc(displayName) + '</div>';
+    html += '<div class="author-handle">@' + esc(username) + ' followed</div>';
+    html += '</div></div>';
+
+    html += '<div class="follow-target">';
+    if (followed.profilePicture) {
+      html += '<img class="avatar" src="' + esc(followed.profilePicture) + '" alt="">';
+    } else {
+      html += '<div class="avatar"></div>';
+    }
+    html += '<div class="follow-target-info">';
+    html += '<div class="follow-target-name">' + esc(followed.name || followed.userName || "?") + '</div>';
+    html += '<div class="follow-target-handle">@' + esc(followed.userName || "?") + '</div>';
+    if (followed.description) html += '<div class="follow-target-bio">' + esc(followed.description) + '</div>';
+    if (followed.followers) html += '<div class="follow-target-followers">' + fmtNum(followed.followers) + ' followers</div>';
+    html += '</div></div>';
+
+    card.innerHTML = html;
+    if (animate) {
+      feed.insertBefore(card, feed.firstChild);
+    } else {
+      feed.appendChild(card);
+    }
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>
